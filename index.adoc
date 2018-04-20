@@ -1,0 +1,765 @@
+////
+NO CAMBIAR!!
+Codificación, idioma, tabla de contenidos, tipo de documento
+////
+:encoding: utf-8
+:lang: es
+:toc: right
+:toc-title: Tabla de contenidos
+:doctype: book
+:imagesdir: ./images
+
+
+
+
+////
+Nombre y título del trabajo
+////
+# Tutorial sobre el desarrollo de una aplicación Ionic con un lector de códigos QR
+Desarrollo de Aplicaciones Híbridas
+Máster TAII - UAL
+
+// NO CAMBIAR!! (Entrar en modo no numerado de apartados)
+:numbered!: 
+
+
+[abstract]
+## Resumen
+
+Veremos cómo crear una aplicación Ionic que use un lector de códigos QR.
+
+.Objetivos
+
+* Aprender a acceder a recursos nativos del dispositivo
+* Implementación de un lector de códigos QR y códigos de barras
+* Aprender a instalar y usar plugins de cordova
+* Usar Google Maps en una aplicación Ionic
+* Usar el almacenamiento interno del dipositivo para guardar los escaneos realizados
+
+// Entrar en modo numerado de apartados
+:numbered:
+
+## Introducción
+
+## Pasos previos
+
+1. Generar las páginas de la aplicación 
+
++
+[source]
+----
+ionic generate page mapa
+ionic generate page escaneos
+ionic generate page tabs
+----
+
+1. Modificar `app.module.ts` para importar las páginas creadas y añadirlas a los arrays `declarations` y `entryComponents`.
+
+1. Modificar `app.component.ts` para que la barra de pestañas sea la página de inicio
+
++
+[source]
+----
+rootPage:any = TabsPage;
+----
+
+1. Crear la barra de pestañas editando los archivos `tabs.ts` y `tabs.html`
+
++
+[source]
+----
+export class TabsPage {
+  tabHome: any;
+  tabEscaneos: any;
+
+  constructor(public navCtrl: NavController, public navParams: NavParams) {
+    this.tabHome = HomePage;
+    this.tabEscaneos = EscaneosPage;
+  }
+}
+----
+
++
+[source]
+----
+<ion-tabs>
+  <ion-tab tabIcon="qr-scanner" tabTitle="Scan" [root]="tabHome"></ion-tab>
+  <ion-tab tabIcon="list" tabTitle="Escaneos" [root]="tabEscaneos"></ion-tab>
+</ion-tabs>
+----
+
+1. Creación de un modelo para los escaneos en un archivo `src/models/scan-data.model.ts`
+
++
+[source]
+----
+export class ScanData {
+  tipo: string; <1>
+  info: string; <2>
+
+  constructor ( tipo: string, info: string) {
+    this.tipo = tipo;
+    this.info = info;
+
+    this.tipo = "no definido";
+
+    if (tipo.startsWith("http")) {
+      this.tipo = "http";
+    }
+  }
+}
+----
+<1> Tipo (url, mail, ...)
+<2> Resultado del escaneo
+
+1. Añadir la plataforma del dispositivo (android o ios)
+
+[source]
+----
+ionic cordova platform add android
+----
+
+## Acceso a la cámara del dispositivo
+
+La lectura de códigos QR la haremos con el plugin Barcode scanner que se encuentra en la sección Native de la https://ionicframework.com/docs/native/barcode-scanner/[documentación de Ionic]. Siguiendo las indicaciones
+
+[source]
+----
+$ ionic cordova plugin add phonegap-plugin-barcodescanner
+$ npm install --save @ionic-native/barcode-scanner
+----
+
+Modificar el archivo `app.module.ts` para importar el Barcode scanner y añadirlo a la lista de providers
+
+[source]
+----
+import { BarcodeScanner } from '@ionic-native/barcode-scanner';
+....
+
+@NgModule({
+  ....
+  providers: [
+    ....
+    BarcodeScanner  <1>
+  ]
+})
+...
+----
+<1> El lector de códigos de barras se importa como provider.
+
+En el archivo en el que se vaya a usar el lector haremos lo siguiente:
+
+* Importar el Barcode scanner
+* Inyectar Barcode scanner en el constructor
+* Crear un método para el escaneo
+
+[source]
+----
+import { BarcodeScanner } from '@ionic-native/barcode-scanner'; <1>
+...
+
+export class HomePage {
+
+  constructor(public navCtrl: NavController,
+            private barcodeScanner: BarcodeScanner) <2> {
+  }
+
+  scan() { <3>
+    this.barcodeScanner.scan().then(barcodeData => {
+      console.log('Barcode data', barcodeData);
+     }).catch(err => {
+         console.log('Error', err);
+     });
+  }
+}
+----
+<1> Importación de Barcode scanner
+<2> Inyección de dependencias
+<3> Método para el escaneo
+
+En `home.html` podemos crear un botón que llame al método `scan()`. 
+
+[source]
+----
+<ion-content padding>
+  <button ion-button block color="primary" (click)="scan()">
+    Scan
+</button>
+</ion-content>
+----
+
+Al ejecutar la aplicación en el simulador mostrará un mensaje de error indicando que no cordova no está disponible. Este tipo de pruebas sólo las podremos llevar a cabo en el dispositivo.
+
+.Uso de Toasts para mostrar en el dispositivo errores o información 
+****
+Los Toasts son unos pequeños cuadros negros de información que aparecen en el dispositivo informando de algún de mensaje de interés.
+
+Los Toasts hay que importarlos e inyectarlos en el constructor. Para usar los Toasts como forma de presentación de errores haremos estos cambios en `home.ts`
+
+[source]
+----
+...
+import { NavController, ToastController } from 'ionic-angular'; <1>
+...
+export class HomePage {
+
+  constructor(public navCtrl: NavController,
+            private barcodeScanner: BarcodeScanner,
+            public toastCtrl: ToastController) { <2>
+  }
+
+  scan() {
+    this.barcodeScanner.scan().then(barcodeData => {
+      console.log('Barcode data', barcodeData);
+     }).catch(err => {
+         console.log('Error', err);
+         this.mostrarError("Error: " + err); <3>
+     }); 
+  }
+
+  mostrarError(mensaje: string) { <4>
+    let toast = this.toastCtrl.create({
+      message: mensaje,
+      duration: 3000,
+      position: 'top'
+    });
+    toast.present();
+  }
+}
+----
+<1> Importación de Toasts
+<2> Inyección de dependencias
+<3> Llamada a función de presentación de errores
+<4> Función de errores usando toasts
+****
+
+## Despliegue en el dispositivo
+
+[source]
+----
+ionic cordova build android
+----
+
+.Comprobación de la plataforma
+****
+Para no tener que estar haciendo continuamente build al dispositivo podemos tener un código para ejecutar de forma alternativa en el proceso de desarrollo y que no conecte con el dispostivo.
+
+`Platform` nos permite determinar en qué plataforma estamos. `Platform` se inyectará como dependencia en el constructor.
+
+[source]
+----
+....
+export class HomePage {
+
+  constructor(public navCtrl: NavController,
+            private barcodeScanner: BarcodeScanner,
+            public toastCtrl: ToastController,
+            private platform: Platform) { <1>
+
+  }
+
+  scan() {
+    ...
+    if (!this.platform.is('cordova')) {
+      ....
+      return;
+    }
+    ...
+  }
+...
+----
+****
+
+## Creación de un servicio (_provider_)
+Los datos del historial se almacenarán y se recuperarán de un _provider_. Para generar un _provider_:
+
+[source]
+----
+ionic generate provider historial
+----
+
+Esto generará el archivo `src/providers/historial/historial.ts` y modificará el array `providers` en `app.module.ts` para añadir el provider del historial.
+
+
+[IMPORTANT]
+====
+HttpClient ha sido introducido en Angular 4.3. Hay que añadir a  `HttpClient` y `HttpClientModule` a `app.module.ts`. `HttpClient` se añadirá al array `providers` y `HttpClientModule` al array `imports`.
+====
+
+.El archivo `historial.ts`
+----
+import { ScanData } from './../../models/scan-data.model'; <1>
+
+import { HttpClient } from '@angular/common/http'; <2>
+import { Injectable } from '@angular/core'; 
+
+@Injectable()
+export class HistorialProvider {
+
+  private historial: ScanData[] = []; <3>
+
+  constructor(public http: HttpClient) {
+  }
+
+  agregarHistorial(tipo: string, info: string) { <4>
+    let data = new ScanData(tipo, info);
+
+    this.historial.unshift(data); // unshift añade al principio
+
+    console.log(this.historial);
+  }
+
+  cargarHistorial() { <5>
+    return this.historial;
+  }
+
+}
+----
+<1> El modelo
+<2> Paquetes necesarios para un servicio
+<3> Variable de instancia que guarda los escaneos
+<4> Método para añadir escaneo al principio del historial
+<5> Método que devuelve el historial
+
+.El archivo `home.ts`
+----
+import { HistorialProvider } from './../../providers/historial/historial'; <1>
+import { BarcodeScanner } from '@ionic-native/barcode-scanner';
+import { Component } from '@angular/core';
+import { NavController, ToastController, Platform } from 'ionic-angular';
+
+@Component({
+  selector: 'page-home',
+  templateUrl: 'home.html'
+})
+export class HomePage {
+
+  constructor(public navCtrl: NavController,
+            private barcodeScanner: BarcodeScanner,
+            public toastCtrl: ToastController,
+            private platform: Platform, 
+            private historialProvider: HistorialProvider) { <2>
+
+  }
+
+  scan() { <3>
+    if (!this.platform.is('cordova')) { <4>
+      this.historialProvider.agregarHistorial("http", "http://google.com");
+      return;
+    }
+
+    this.barcodeScanner.scan().then(barcodeData => { <5>
+      console.log('result', barcodeData.text);
+      console.log('format: ', barcodeData.format);
+      console.log('cancelled: ', barcodeData.cancelled);
+      if (barcodeData.cancelled == false && barcodeData.text != null) {
+        this.historialProvider.agregarHistorial(barcodeData.format, barcodeData.text);
+      }
+     }).catch(err => {
+         console.log('Error', err);
+         this.mostrarError("Error: " + err);
+     });
+  }
+
+  mostrarError(mensaje: string) {
+    let toast = this.toastCtrl.create({
+      message: mensaje,
+      duration: 3000,
+      position: 'top'
+    });
+    toast.present();
+  }
+
+}
+----
+
+<1> Importación del servicio
+<2> Inyección del servicio
+<3> Nuevo método `scan()`
+<4> Código a ejecutar cuando estemos en pruebas en el navegador
+<5> Código para un escaneo real
+
+## Abrir página leída con el lector de ćodigos QR
+
+Usaremos el plugin nativo `In App Browser`. Para instalarlo seguiremos la https://ionicframework.com/docs/native/in-app-browser/[documentación oficial del plugin In App Browser] haremos:
+
+[source]
+----
+ionic cordova plugin add cordova-plugin-inappbrowser
+sudo npm install --save @ionic-native/in-app-browser
+----
+
+Después, modificar el archivo `app.module.ts` y añadirlo a la lista de providers.
+
+[source]
+----
+....
+import { InAppBrowser } from '@ionic-native/in-app-browser'; <1>
+....
+@NgModule({
+  ....
+  providers: [
+    StatusBar,
+    SplashScreen,
+    {provide: ErrorHandler, useClass: IonicErrorHandler},
+    BarcodeScanner,
+    HistorialProvider,
+    InAppBrowser <2>
+  ]
+})
+...
+----
+<1> Importación del In App Browser
+<2> Añadir In App Browser a la lista de providers
+
+## Presentación de mapas
+
+Uno de los tipos de códigos QR que podemos obtener es relativo a mapas. El código QR devolverá la latitud y longitud. 
+
+Para mostrar un mapa usaremos Angular Google Maps (componentes de Angular 2+ para Google Maps). En la sección https://angular-maps.com/guides/getting-started/[Getting started with AGM] de la documentación oficial vemos las indicaciones a seguir:
+
+[source]
+----
+sudo npm install @agm/core --save
+----
+
+Incluir estas modificaciones en el archivo `app.module.ts`
+
+[source]
+----
+import { AgmCoreModule } from '@agm/core';
+...
+@NgModule({
+  ...
+  imports: [
+    BrowserModule,
+    IonicModule.forRoot(MyApp),
+    HttpClientModule,
+    AgmCoreModule.forRoot({
+      apiKey: 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+    })
+  ],
+  ...
+})
+export class AppModule {}
+----
+
+[NOTE]
+====
+Para usar AGM necesitamos una API Key que podemos obtener de la https://developers.google.com/maps/documentation/javascript/get-api-key[web de Google Maps API]. Crearemos una API Key para nuestro proyecto. La clave obtenida será la que usaremos en el código anterior.
+====
+
+En el componente de mapas de nuestra aplicación modificaremos los archivos `.ts`, `.html` y `.scss`.
+
+.El archivo `mapa.ts`
+En este archivo inicializaremos los valores de latitud y longitud.
+====
+[source]
+----
+....
+export class MapaPage {
+  lat: number; <1>
+  lng: number;
+
+  constructor(public navCtrl: NavController, public navParams: NavParams) {
+    this.lat = 51.678418; <2>
+    this.lng = 7.809007;
+  }
+
+  ...
+}
+----
+<1> Declaración de variables
+<2> Inicialización de variables
+====
+
+.El archivo `mapa.html`
+====
+Este archivo muestra el mapa centrado en las coordenadas indicadas y añade un marcador.
+[source]
+----
+<ion-content>
+    <agm-map [latitude]="lat" [longitude]="lng"> <1>
+        <agm-marker [latitude]="lat" [longitude]="lng"></agm-marker> <2>
+      </agm-map>
+</ion-content>
+----
+<1> Creación del mapa
+<2> Creación del marcador
+====
+
+.El archivo `mapa.scss`
+====
+Añadiremos el estilo siguiente para poder ver el mapa en el dispositivo.
+[source]
+----
+agm-map {
+  height: 100%;
+}
+----
+====
+
+[NOTE]
+====
+Por ahora no podremos ver el mapa creado. Si estamos interesados en verlo podríamos temporalmente cambiar la página de inicio en `app.component.ts` para que fuese `MapaPage` en lugar de `TabsPage` o añadir una nueva pestaña para el mapa en la barra de pestañas. 
+====
+
+## Abrir mapas a partir de códigos QR
+
+El lector de códigos QR devolverá datos en un formato similar a este:
+
+[source]
+----
+geo:xxx,yyy
+----
+
+donde `xxx` es el valor de latitud leído e `yyy` el de longitud.
+
+.Modificaciones en el achivo `models/scan-data.model.ts`
+====
+[source]
+----
+export class ScanData {
+  tipo: string;
+  info: string;
+
+  constructor ( tipo: string, info: string) {
+    this.tipo = tipo;
+    this.info = info;
+
+    this.tipo = "no definido";
+
+    if (info.startsWith("http")) {
+      this.tipo = "http";
+    } else if (info.startsWith("geo")) { <1>
+      this.tipo = "mapa"
+    }
+  }
+}
+----
+<1> Añadimos el tipo _mapa_
+====
+
+El mapa los presentaremos como una página modal. Modificamos el archivo `providers/historial.ts`.
+
+.El archivo `providers/historial.ts`
+====
+----
+import { ModalController } from 'ionic-angular'; <1>
+import { MapaPage } from './../../pages/mapa/mapa'; <2> 
+...
+export class HistorialProvider {
+
+  ...
+
+  constructor(public http: HttpClient,
+              private iab: InAppBrowser,
+              private modalController: ModalController) {<3>
+  }
+
+  ...
+
+  abrirEscaneo(index: number) {
+    let scanData = this.historial[index];
+
+    switch(scanData.tipo) {
+      case "http":
+        this.iab.create(scanData.info);
+        break;
+      case "mapa": <4>
+        this.modalController.create(MapaPage, {coords: scanData.info}).present();
+        break;
+
+      default:
+        console.error("Tipo no soportado")
+    }
+  }
+}
+----
+<1> Importar `ModalController` para poder crear página modal
+<2> Importar la clase del mapa
+<3> Los controladores modales se inyectan en el constructor
+<4> Crear un mapa con los datos de escaneo y mostrar la página
+====
+
+Para completar, modificaremos `maps.html` y `maps.ts` para añadir un botón que cierre la página modal.
+
+.El archivo `maps.html`
+====
+[source]
+----
+....
+<ion-footer>
+  <ion-toolbar>
+    <button ion-button block (click)="cerrar()"> <1>
+      Cerrar
+    </button>
+  </ion-toolbar>
+</ion-footer>
+----
+<1> Botón de cierre de la página modal
+====
+
+.El archivo `maps.ts`
+====
+[source]
+----
+import { ViewController } from 'ionic-angular'; <1>
+...
+export class MapaPage {
+  ...
+  constructor(public navCtrl: NavController, public navParams: NavParams, private viewController: ViewController) { <2>
+    ...
+  }
+
+  ...
+
+  cerrar() {
+    this.viewController.dismiss(); <3>
+  }
+}
+----
+<1> Las páginas modales son gestionadas con `ViewController`
+<2> Inyección del `viewController` en el costructor
+<3> Cierre de la página modal con `dismiss()`
+====
+
+### Obtener la latitud y longitud del código QR
+
+Para finalizar la parte relativa al lector de códigos QR de direcciones falta cambiar los valores estáticos de latitud y longitud por los obtenidos por le lector.
+
+[source]
+----
+...
+export class MapaPage {
+  ...
+  constructor(public navCtrl: NavController, public navParams: NavParams, private viewController: ViewController) {
+    let coordsArray = this.navParams.get("coords").split(","); <1>
+    this.lat = Number(coordsArray[0].replace("geo:", "")); <2>
+    this.lng = Number(coordsArray[1]); <3>
+  }
+  ...
+}
+----
+<1> Construir un array con el valor que viene en el parámetro `coords`. Usamos la coma para acceder a los elementos del array
+<2> Eliminar la cadena `geo:` del principio para formar la latitud
+<3> Configurar la longitud. Tanto latitud como longitud hay que convertirlas a numéro porque vienen como cadenas.
+
+## Agregar contactos a través de códigos QR
+
+QR permite también codificar contactos en forma de VCards.
+
+.Ejemplo de una cadena de texto de una VCard leída por el lector de códigos QR
+****
+[source]
+----
+`BEGIN:VCARD
+VERSION:2.1
+N:Kent;Clark
+FN:Clark Kent
+ORG:
+TEL;HOME;VOICE:12345
+TEL;TYPE=cell:67890
+ADR;TYPE=work:;;;
+EMAIL:clark@superman.com
+END:VCARD`
+----
+**** 
+
+El texto de la VCard deberá ser tratado y convertirlo en un array con cada uno de los elementos de la tarjeta. A continuación se muestra el código para procesar la cadena de una VCard.
+
+.Códdigo para procesar una vCard
+====
+private parse_vcard( input:string ) {
+
+    var Re1 = /^(version|fn|title|org):(.+)$/i;
+    var Re2 = /^([^:;]+);([^:]+):(.+)$/;
+    var ReKey = /item\d{1,2}\./;
+    var fields = {};
+
+    input.split(/\r\n|\r|\n/).forEach(function (line) {
+        var results, key;
+
+        if (Re1.test(line)) {
+            results = line.match(Re1);
+            key = results[1].toLowerCase();
+            fields[key] = results[2];
+        } else if (Re2.test(line)) {
+            results = line.match(Re2);
+            key = results[1].replace(ReKey, '').toLowerCase();
+
+            var meta = {};
+            results[2].split(';')
+                .map(function (p, i) {
+                var match = p.match(/([a-z]+)=(.*)/i);
+                if (match) {
+                    return [match[1], match[2]];
+                } else {
+                    return ["TYPE" + (i === 0 ? "" : i), p];
+                }
+            })
+                .forEach(function (p) {
+                meta[p[0]] = p[1];
+            });
+
+            if (!fields[key]) fields[key] = [];
+
+            fields[key].push({
+                meta: meta,
+                value: results[3].split(';')
+            })
+        }
+    });
+
+    return fields;
+};
+----
+====
+
+.Modificación de `scan-data.model.ts` para identificar los contactos
+====
+[source]
+----
+export class ScanData {
+  ...
+
+  constructor ( tipo: string, info: string) {
+    ...
+
+    if (info.startsWith("http")) {
+      this.tipo = "http";
+    } else if (info.startsWith("geo")) {
+      this.tipo = "mapa"
+    } else if (info.startsWith("BEGIN:VCARD")) { <1>
+      this.tipo = "contacto";
+    }
+  }
+}
+----
+<1> Detección de VCard
+====
+
+Para almacenar el contacto tendremos que acceder al dispositivo. Usaremos el https://ionicframework.com/docs/native/contacts/[plugin de contactos de Cordova]. Para instalarlo haremos:
+
+[source]
+----
+ionic cordova plugin add cordova-plugin-contacts
+sudo npm install --save @ionic-native/contacts
+----
+
+Después, modificar el archivo `app.module.ts` y añadirlo a la lista de providers.
+
+[source]
+----
+import { Contacts } from '@ionic-native/contacts';
+...
+@NgModule({
+  ...
+  providers: [
+    ...
+    Contacts
+  ]
+})
+----
+
+    
