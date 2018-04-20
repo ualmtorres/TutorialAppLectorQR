@@ -443,6 +443,7 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 </ul>
 </li>
 <li><a href="#trueagregar-contactos-a-trav-s-de-c-digos-qr">9. Agregar contactos a través de códigos QR</a></li>
+<li><a href="#trueenv-o-de-emails-a-partir-de-c-digos-qr">10. Envío de emails a partir de códigos QR</a></li>
 </ul>
 </div>
 </div>
@@ -1529,10 +1530,221 @@ sudo npm install --save @ionic-native/contacts</code></pre>
 </div>
 </div>
 </div>
+<div class="sect1">
+<h2 id="trueenv-o-de-emails-a-partir-de-c-digos-qr"><a class="anchor" href="#trueenv-o-de-emails-a-partir-de-c-digos-qr"></a>10. Envío de emails a partir de códigos QR</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Usaremos el plugin nativo <code>Email Composer</code>. Para instalarlo seguiremos la <a href="https://ionicframework.com/docs/native/email-composer/">documentación oficial del plugin In App Browser</a> haremos:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code>ionic cordova plugin add cordova-plugin-email-composer
+sudo npm install --save @ionic-native/email-composer</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Después, modificar el archivo <code>app.module.ts</code> y añadirlo a la lista de providers.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code>import { EmailComposer } from '@ionic-native/email-composer'; <i class="conum" data-value="1"></i><b>(1)</b>
+...
+@NgModule({
+  ...
+  providers: [
+    StatusBar,
+    SplashScreen,
+    {provide: ErrorHandler, useClass: IonicErrorHandler},
+    BarcodeScanner,
+    HistorialProvider,
+    HttpClient,
+    InAppBrowser,
+    Contacts,
+    EmailComposer <i class="conum" data-value="2"></i><b>(2)</b>
+  ]
+})
+...</code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td>Importación del plugin</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="2"></i><b>2</b></td>
+<td>Añadir la clase del plugin a providers para poder inyectarlo en constructores</td>
+</tr>
+</table>
+</div>
+<div class="sidebarblock">
+<div class="content">
+<div class="title">Cadena devuelta por el lector de códigos QR para un email</div>
+<div class="paragraph">
+<p>Aquí se muestra la cadena que devolvería el lector de códigos QR para un email con:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Destinatario: <a href="mailto:johndoe@gmail.com">johndoe@gmail.com</a></p>
+</li>
+<li>
+<p>Asunto: Hello</p>
+</li>
+<li>
+<p>Cuerpo: Hello world</p>
+</li>
+</ul>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code>MATMSG:TO:johndoe@gmail.com;SUB:Hello;BODY:Hello world;;</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="exampleblock">
+<div class="title">Example 9. Modificaciones al archivo `models/scan-data.model.ts</div>
+<div class="content">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code>export class ScanData {
+  ...
+    if (info.startsWith("http")) {
+      this.tipo = "http";
+    } else if (info.startsWith("geo")) {
+      this.tipo = "mapa"
+    } else if (info.startsWith("BEGIN:VCARD")) {
+      this.tipo = "contacto";
+    } else if (info.startsWith("MATMSG:TO")) { <i class="conum" data-value="1"></i><b>(1)</b>
+      this.tipo = "email";
+    }
+  }
+}</code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td>Reconocer el inicio de un código QR de un email</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="exampleblock">
+<div class="title">Example 10. Modificaciones al archivo <code>pages/historial/historial.ts</code></div>
+<div class="content">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code>import { EmailComposer } from '@ionic-native/email-composer';
+....
+
+@Injectable()
+export class HistorialProvider {
+  ...
+  constructor(public http: HttpClient,
+              private iab: InAppBrowser,
+              private modalController: ModalController,
+              private contacts: Contacts,
+              private toastController: ToastController,
+              private platform: Platform,
+              private emailComposer: EmailComposer) { <i class="conum" data-value="1"></i><b>(1)</b>
+  }
+  ...
+  abrirEscaneo(index: number) {
+    let scanData = this.historial[index];
+
+    switch(scanData.tipo) {
+      ...
+      case "email": <i class="conum" data-value="2"></i><b>(2)</b>
+        this.enviarEmail(scanData.info);
+        break;
+      default:
+        console.error("Tipo no soportado");
+    }
+  }
+
+  private enviarEmail(texto: string) { <i class="conum" data-value="3"></i><b>(3)</b>
+
+    let emailArray = texto.split(/[;]/); <i class="conum" data-value="4"></i><b>(4)</b>
+
+    let to = emailArray[0].replace("MATMSG:TO:", ""); <i class="conum" data-value="5"></i><b>(5)</b>
+    let subject = emailArray[1].replace("SUB:", "");
+    let body = emailArray[2].replace("BODY:", "");
+
+    let email = { <i class="conum" data-value="6"></i><b>(6)</b>
+      "to": to,
+      "subject": subject,
+      "body": body
+    };
+
+    this.emailComposer.open(email); <i class="conum" data-value="7"></i><b>(7)</b>
+  }
+}</code></pre>
+</div>
+</div>
+<div class="colist arabic">
+<table>
+<tr>
+<td><i class="conum" data-value="1"></i><b>1</b></td>
+<td>Inyección del Email composer</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="2"></i><b>2</b></td>
+<td>Detección de un código QR de email</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="3"></i><b>3</b></td>
+<td>Método para procesar el envío de un email</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="4"></i><b>4</b></td>
+<td>Crear un array a partir de la cadena del código QR considerando el punto y coma como separador</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="5"></i><b>5</b></td>
+<td>Obtener las partes para componer el email</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="6"></i><b>6</b></td>
+<td>Componer el email a enviar</td>
+</tr>
+<tr>
+<td><i class="conum" data-value="7"></i><b>7</b></td>
+<td>Abrir el programa de correo del dispostivo con el email preparado</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>A modo de pruebas añadiremos un fragmento de código estático de un supuesto código QR al archivo <code>home.ts</code> para hacer pruebas en un navegador. La prueba no podrá ser  completa ya que no hay acceso a la cámara para poder escanear el código QR.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code>...
+export class HomePage {
+
+  scan() {
+    if (!this.platform.is('cordova')) {
+      this.historialProvider.agregarHistorial("email", "MATMSG:TO:johndoe@gmail.com;SUB:Hello;BODY:Hello world;;");
+      return;
+    }
+    ...
+  }
+  ...
+}</code></pre>
+</div>
+</div>
+</div>
+</div>
 </div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2018-04-20 09:57:13 CEST
+Last updated 2018-04-20 15:01:11 CEST
 </div>
 </div>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/8.9.1/styles/github.min.css">

@@ -762,4 +762,150 @@ import { Contacts } from '@ionic-native/contacts';
 })
 ----
 
+## Envío de emails a partir de códigos QR
+
+Usaremos el plugin nativo `Email Composer`. Para instalarlo seguiremos la https://ionicframework.com/docs/native/email-composer/[documentación oficial del plugin In App Browser] haremos:
+
+[source]
+----
+ionic cordova plugin add cordova-plugin-email-composer
+sudo npm install --save @ionic-native/email-composer
+
+----
+
+Después, modificar el archivo `app.module.ts` y añadirlo a la lista de providers.
+
+[source]
+----
+import { EmailComposer } from '@ionic-native/email-composer'; <1>
+...
+@NgModule({
+  ...
+  providers: [
+    StatusBar,
+    SplashScreen,
+    {provide: ErrorHandler, useClass: IonicErrorHandler},
+    BarcodeScanner,
+    HistorialProvider,
+    HttpClient,
+    InAppBrowser,
+    Contacts,
+    EmailComposer <2>
+  ]
+})
+...
+----
+<1> Importación del plugin
+<2> Añadir la clase del plugin a providers para poder inyectarlo en constructores
+
+.Cadena devuelta por el lector de códigos QR para un email
+****
+Aquí se muestra la cadena que devolvería el lector de códigos QR para un email con:
+
+* Destinatario: johndoe@gmail.com 
+* Asunto: Hello
+* Cuerpo: Hello world
+
+[source]
+----
+MATMSG:TO:johndoe@gmail.com;SUB:Hello;BODY:Hello world;;
+----
+****
+
+.Modificaciones al archivo `models/scan-data.model.ts
+====
+[source]
+----
+export class ScanData {
+  ...
+    if (info.startsWith("http")) {
+      this.tipo = "http";
+    } else if (info.startsWith("geo")) {
+      this.tipo = "mapa"
+    } else if (info.startsWith("BEGIN:VCARD")) {
+      this.tipo = "contacto";
+    } else if (info.startsWith("MATMSG:TO")) { <1>
+      this.tipo = "email";
+    }
+  }
+}
+----
+<1> Reconocer el inicio de un código QR de un email
+====
+
+.Modificaciones al archivo `pages/historial/historial.ts` 
+====
+[source]
+----
+import { EmailComposer } from '@ionic-native/email-composer';
+....
+
+@Injectable()
+export class HistorialProvider {
+  ...
+  constructor(public http: HttpClient,
+              private iab: InAppBrowser,
+              private modalController: ModalController,
+              private contacts: Contacts,
+              private toastController: ToastController,
+              private platform: Platform,
+              private emailComposer: EmailComposer) { <1>
+  }
+  ...
+  abrirEscaneo(index: number) {
+    let scanData = this.historial[index];
+
+    switch(scanData.tipo) {
+      ...
+      case "email": <2>
+        this.enviarEmail(scanData.info);
+        break;
+      default:
+        console.error("Tipo no soportado");
+    }
+  }
+
+  private enviarEmail(texto: string) { <3>
+
+    let emailArray = texto.split(/[;]/); <4>
     
+    let to = emailArray[0].replace("MATMSG:TO:", ""); <5>
+    let subject = emailArray[1].replace("SUB:", "");
+    let body = emailArray[2].replace("BODY:", "");
+
+    let email = { <6>
+      "to": to,
+      "subject": subject,
+      "body": body
+    };
+
+    this.emailComposer.open(email); <7>
+  }
+}
+----
+<1> Inyección del Email composer
+<2> Detección de un código QR de email
+<3> Método para procesar el envío de un email
+<4> Crear un array a partir de la cadena del código QR considerando el punto y coma como separador
+<5> Obtener las partes para componer el email
+<6> Componer el email a enviar
+<7> Abrir el programa de correo del dispostivo con el email preparado
+====
+
+A modo de pruebas añadiremos un fragmento de código estático de un supuesto código QR al archivo `home.ts` para hacer pruebas en un navegador. La prueba no podrá ser  completa ya que no hay acceso a la cámara para poder escanear el código QR.
+
+[source]
+----
+...
+export class HomePage {
+
+  scan() {
+    if (!this.platform.is('cordova')) {
+      this.historialProvider.agregarHistorial("email", "MATMSG:TO:johndoe@gmail.com;SUB:Hello;BODY:Hello world;;");
+      return;
+    }
+    ...
+  }
+  ...
+}
+----
